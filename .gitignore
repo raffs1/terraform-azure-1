@@ -1,0 +1,5 @@
+# ignore all txt files
+**/*.txt
+*.txt
+**/.terraform/*
+secrets.tf

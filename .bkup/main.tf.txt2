@@ -1,0 +1,130 @@
+terraform {
+  required_providers {
+    azurerm = {
+      source  = "hashicorp/azurerm"
+      version = "~> 3.0.2"
+    }
+  }
+
+  required_version = ">= 1.1.0"
+}
+
+provider "azurerm" {
+  features {}
+}
+
+resource "azurerm_resource_group" "myResourceGroup" {
+  name     = "myTFResourceGroup"
+  location = "Australia East"
+}
+
+
+resource "azurerm_resource_group" "myNetworkWatcherResourceGroup" {
+  name     = "myDevNetworkWatcherRG"
+  location = "Australia East"
+}
+
+resource "azurerm_network_watcher" "myNetworkWatcher" {
+  name                = "myDevNetworkWatcherRG"
+  location            = azurerm_resource_group.myNetworkWatcherResourceGroup.location
+  resource_group_name = azurerm_resource_group.myNetworkWatcherResourceGroup.name
+}
+
+resource "azurerm_virtual_network" "myVirtualNetwork" {
+  name                = "myVnet"
+  address_space       = ["10.0.0.0/16"]
+  location            = azurerm_resource_group.myResourceGroup.location
+  resource_group_name = azurerm_resource_group.myResourceGroup.name
+}
+
+resource "azurerm_subnet" "myVirtualSubnet" {
+  name                 = "mySubnet"
+  resource_group_name  = azurerm_resource_group.myResourceGroup.name
+  virtual_network_name = azurerm_virtual_network.myVirtualNetwork.name 
+  address_prefixes     = ["10.0.1.0/24"]
+}
+
+resource "azurerm_network_interface" "myVirtualNic" {
+  name                = "myNic"
+  location            = azurerm_resource_group.myResourceGroup.location
+  resource_group_name = azurerm_resource_group.myResourceGroup.name
+
+  ip_configuration {
+    name                          = "myNicConfig"
+    subnet_id                     = azurerm_subnet.myVirtualSubnet.id
+    private_ip_address_allocation = "Dynamic"
+  }
+}
+
+
+resource "azurerm_linux_virtual_machine" "myVirtualVm" {
+  name                = "myVm"
+  location            = azurerm_resource_group.myResourceGroup.location
+  resource_group_name = azurerm_resource_group.myResourceGroup.name
+  network_interface_ids = [azurerm_network_interface.myVirtualNic.id]
+
+  size                 = "Standard_DS1_v2"
+  admin_username       = "adminuser"
+  admin_password       = "P@ssw0rd123!"  # Replace with your own password
+  disable_password_authentication = "false"
+
+  os_disk {
+    caching              = "ReadWrite"
+    storage_account_type = "Standard_LRS"
+  }
+
+  source_image_reference {
+    publisher = "Canonical"
+    offer     = "UbuntuServer"
+    sku       = "18.04-LTS"
+    version   = "latest"
+  }
+}
+
+
+
+#resource "azurerm_virtual_machine" "my_vm" {
+#  name                  = "myVM"
+#  location              = azurerm_resource_group.myResourceGroup.location
+#  resource_group_name   = azurerm_resource_group.myResourceGroup.name
+#  network_interface_ids = [azurerm_network_interface.myVirtualNic.id]
+#
+#  vm_size = "Standard_B1s"  # Replace with your desired VM size
+#
+#  storage_os_disk {
+#    name              = "example-osdisk"
+#    caching           = "ReadWrite"
+#    create_option     = "FromImage"
+#    os_type           = "Linux"
+#    managed_disk_type = "Standard_LRS"
+#  }
+#
+#  storage_image_reference {
+#    publisher = "Canonical"
+#    offer     = "UbuntuServer"
+#    sku       = "18.04-LTS"
+#    version   = "latest"
+#  }
+#
+#  os_profile {
+#    computer_name  = "myvm"
+#    admin_username = "adminuser"
+#    admin_password = "P@ssw0rd123!"  # Replace with your desired password
+#  }
+#
+#  os_profile_linux_config {
+#    disable_password_authentication = true
+#
+#  }
+#  
+#  tags = {
+#    environment = "dev"
+#  }
+#}
+#
+#output "vm_ip" {
+#  value = azurerm_network_interface.raffs_nic.private_ip_address
+#}
+
+
+

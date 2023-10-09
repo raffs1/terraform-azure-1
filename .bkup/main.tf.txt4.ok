@@ -1,0 +1,124 @@
+terraform {
+  required_providers {
+    azurerm = {
+      source  = "hashicorp/azurerm"
+      version = "~> 3.0.2"
+    }
+  }
+
+  required_version = ">= 1.1.0"
+}
+
+provider "azurerm" {
+  features {}
+}
+
+
+variable "vm_count" {
+  description = "Number of VM instances to create"
+  type        = number
+  default     = 1  # Change this to the desired number of VMs
+}
+
+variable "vm_prefix" {
+  description = "Prefix for VM names"
+  type        = string
+  default     = "linux-vm--"
+}
+
+variable "resource_group_name" {
+  description = "Name of the Azure resource group"
+  type        = string
+  default     = "my-az-resource-group"
+}
+
+variable "location" {
+  description = "Azure region for resources"
+  type        = string
+  default     = "Australia East"  # Change this to your desired Azure region
+}
+
+variable "admin_username" {
+  description = "Username for SSH access"
+  type        = string
+  default     = "azureuser"
+}
+
+variable "admin_ssh_key" {
+  description = "SSH public key for VM access"
+  type        = string
+  default     = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQClqyrrOtR4olHb/J/NBUKaeVlyxREsTCvtVlH/PqQDCZ933LpzXLZS5Xf03KookQJR6oceoNQaCN03QHJomYtsVzF3dYbRQJnKF4Igwy4NcIxPukHSbr8Tx1pQyp1vkQUPlm6l4REdICU2PHStQVD70B+BbkMEV0ZPed9vjdcutqCK/MW4dXtUFUNGr5Cy4M/0win95NmmXy5wzfuAQHedtOAjZQk17XdClddl0TG/sMzDjHRiVpEMqNPIejSyZhv+DRUrvdLEpt2gTaSpVYd37nUkTupkt/jDDdUEaN0gDaXM2khqIJ9lyNg+zsi4SlYny6C9/byDTNlQs+CXmFXefA8NKBq5JNRuUJfEFpv1La4Sap6zOY/D3bmaZefha3XkE9iUjsj0Tug1wdWI3C51WfuRKvNGPRTPIFqtGMcVa0qRpasDCDQhH7BmOr0Skg+CVQVpJuExEABOt3Ai9KDUgRrimdxKLh+jr393P13/oa1RUon+0HwLWCkLBONXYeTfFVRFg3kAfjJP5akQoIMHIsjtMUDUM0ltI14G/h9nIedBC9mIF8Z3i54JQTFFfuyBm9Vh61myZoR48g9DO0xDRPCCDXYWLrOMdt6CaFI1pbtTybcbD8o0PLupHbrhONjejfe4e+LRpVyDEn4Kifri9cCJDAGP8UxaUDoIN2/3Ow== ajrafferty67@gmail.com"
+}
+
+resource "azurerm_resource_group" "rg" {
+  name     = var.resource_group_name
+  location = var.location
+}
+
+resource "azurerm_resource_group" "azurermNetworkWatcher" {
+  name     = "NetworkWatcherRG"
+  location = "Australia East"
+}
+
+resource "azurerm_network_watcher" "azurermNetworkWatcher" {
+  name                = "NetworkWatcherRG"
+  location            = azurerm_resource_group.azurermNetworkWatcher.location
+  resource_group_name = azurerm_resource_group.azurermNetworkWatcher.name
+}
+
+resource "azurerm_network_interface" "nic" {
+  count = var.vm_count
+
+  name                = "${var.vm_prefix}-nic-${count.index}"
+  location            = azurerm_resource_group.rg.location
+  #resource_group_name = azurerm_resource_group.rg.name
+  resource_group_name = azurerm_resource_group.azurermNetworkWatcher.name
+
+  ip_configuration {
+    name                          = "ipconfig-${count.index}"
+    subnet_id                     = azurerm_subnet.default.id
+    private_ip_address_allocation = "Dynamic"
+  }
+}
+
+resource "azurerm_subnet" "default" {
+  name                 = "default"
+  resource_group_name = azurerm_resource_group.rg.name
+  virtual_network_name = azurerm_virtual_network.vnet.name
+  address_prefixes     = ["10.0.2.0/24"]  # Adjust this subnet range as needed
+}
+
+resource "azurerm_virtual_network" "vnet" {
+  name                = "my-vnet"
+  address_space       = ["10.0.0.0/16"]
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+}
+
+resource "azurerm_linux_virtual_machine" "vm" {
+  count = var.vm_count
+
+  name                = "${var.vm_prefix}${count.index}"
+  resource_group_name = azurerm_resource_group.rg.name
+  location            = azurerm_resource_group.rg.location
+  size                = "Standard_DS1_v2"
+  admin_username      = var.admin_username
+  network_interface_ids = [azurerm_network_interface.nic[count.index].id]
+
+  admin_ssh_key {
+    username   = var.admin_username
+    public_key = var.admin_ssh_key
+  }
+
+  os_disk {
+    caching              = "ReadWrite"
+    storage_account_type = "Standard_LRS"
+  }
+
+  source_image_reference {
+    publisher = "Canonical"
+    offer     = "UbuntuServer"
+    sku       = "18.04-LTS"
+    version   = "latest"
+  }
+}
